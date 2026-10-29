@@ -1,0 +1,48 @@
+<!doctype html><html lang="ms"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><meta name="theme-color" content="#7c3aed"><title>Sembilan</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;color:#1e1b4b}
+#map{position:fixed;inset:0}
+.fl{position:fixed;z-index:600}
+#search{top:calc(10px + env(safe-area-inset-top));left:10px;right:10px;background:#fff;border-radius:24px;box-shadow:0 4px 16px #0003;padding:6px 8px}
+#search input{width:100%;border:0;outline:0;font-size:17px;padding:10px 12px;background:none}
+#res div{padding:10px 12px;border-top:1px solid #eee;font-size:14px}
+.brand{font-weight:800;color:#7c3aed}
+#sheet{left:0;right:0;bottom:0;background:#fff;border-radius:22px 22px 0 0;box-shadow:0 -4px 20px #0003;padding:14px 16px calc(14px + env(safe-area-inset-bottom));display:none}
+.big{font-size:24px;font-weight:800}.muted{color:#6b7280;font-size:13px}
+.btn{border:0;border-radius:16px;padding:14px 18px;font-size:17px;font-weight:800;cursor:pointer}
+.go{background:#22c55e;color:#fff;width:100%;font-size:22px;margin-top:10px}
+.warn{background:#fef9c3;border-radius:10px;padding:6px 8px;font-size:12px;margin-top:8px}
+#fabs{right:12px;bottom:calc(24px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;align-items:flex-end}
+.fab{width:58px;height:58px;border-radius:50%;border:0;box-shadow:0 4px 12px #0004;font-size:26px;background:#fff;cursor:pointer}
+#repBtn{width:72px;height:72px;background:#f97316;color:#fff;font-size:32px}
+#leftfabs{left:12px;bottom:calc(24px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px}
+#sosBtn{background:#ef4444;color:#fff;font-weight:800;font-size:16px}
+.modal{position:fixed;inset:0;z-index:900;background:#0007;display:none;align-items:flex-end}
+.modal .box{background:#fff;width:100%;border-radius:22px 22px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));max-height:85vh;overflow:auto}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.rep{border:0;border-radius:18px;padding:14px 4px;font-size:13px;font-weight:700;color:#fff}.rep b{display:block;font-size:34px}
+#banner{top:calc(10px + env(safe-area-inset-top));left:10px;right:10px;background:#7c3aed;color:#fff;border-radius:20px;padding:14px 16px;display:none;box-shadow:0 4px 16px #0004}
+#banner .ins{font-size:21px;font-weight:800}
+#drivebar{left:0;right:0;bottom:0;background:#fff;padding:12px 16px calc(12px + env(safe-area-inset-bottom));display:none;align-items:center;gap:12px;box-shadow:0 -4px 16px #0003}
+#speed{width:64px;height:64px;border-radius:50%;border:4px solid #1e1b4b;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:800;font-size:22px;line-height:1}#speed small{font-size:10px}
+#alert{top:45%;left:20px;right:20px;background:#f97316;color:#fff;border-radius:18px;padding:16px;font-size:18px;font-weight:800;text-align:center;display:none}
+.card{background:#f5f3ff;border-radius:14px;padding:12px;margin-bottom:10px}
+.tag{display:inline-block;background:#fff;border-radius:8px;padding:2px 7px;margin:2px;font-size:12px}
+.sos a{display:block;text-align:center;color:#fff;text-decoration:none;font-size:21px;font-weight:800;padding:16px;border-radius:16px;margin:8px 0}
+.mk{font-size:26px;filter:drop-shadow(0 2px 2px #0005)}.mk span{display:block;font-size:10px;background:#fff;border-radius:6px;padding:0 3px;text-align:center;font-weight:700;white-space:nowrap;color:#333}
+.vote button{border:0;border-radius:10px;padding:8px 10px;margin:4px 2px;font-weight:700}
+.close{float:right;background:#eee;border:0;border-radius:50%;width:34px;height:34px;font-size:18px}
+</style></head><body>
+<div id="map"></div>
+<div id="search" class="fl"><input id="q" placeholder="🔍 Ke mana? · Where to?"><div id="res"></div></div>
+<div id="banner" class="fl"><div class="ins" id="ins">—</div><div id="insd" style="opacity:.9"></div></div>
+<div id="alert" class="fl"></div>
+<div id="leftfabs" class="fl"><button class="fab" id="sosBtn" onclick="openM('mSos')">SOS</button><button class="fab" onclick="openM('mRR')">☕</button></div>
+<div id="fabs" class="fl"><button class="fab" onclick="recenter()">🎯</button><button class="fab" id="repBtn" onclick="openM('mRep')">⚠️</button></div>
+<div id="sheet" class="fl"><button class="close" onclick="clearRoute()">✕</button><div id="dname" style="font-weight:700"></div><div class="big" id="dinfo"></div><div id="dtoll"></div><div class="warn">Kadar tol ialah contoh anggaran sahaja (bukan rasmi). Tiada data trafik rasmi.</div><button class="btn go" onclick="startDrive()">▶ Go</button></div>
+<div id="drivebar" class="fl"><div id="speed">0<small>km/j</small></div><div style="flex:1"><div class="big" id="eta">--</div><div class="muted" id="rem">--</div></div><button class="btn" style="background:#ef4444;color:#fff" onclick="stopDrive()">Tamat</button></div>
+<div class="modal" id="mRep" onclick="if(event.target==this)closeM()"><div class="box"><button class="close" onclick="closeM()">✕</button><h3 style="margin-top:4px">Lapor · Report</h3><div class="grid" id="repgrid"></div><p class="muted">Laporan komuniti disimpan di peranti ini (localStorage) — prototaip.</p></div></div>
+<div class="modal" id="mRR" onclick="if(event.target==this)closeM()"><div class="box"><button class="close" onclick="closeM()">✕</button><h3 style="margin-top:4px">R&amp;R Lebuhraya</h3><div class="warn">Data contoh / Sample data — facilities may differ.</div><div id="rrlist" style="margin-top:8px"></div></div></div>
+<div class="modal" id="mSos" onclick="if(event.target==this)closeM()"><div class="box sos"><button class="close" onclick="closeM()">✕</button><h3 style="margin-top:4px">🚨 Kecemasan</h3><a style="background:#dc2626" href="tel:999">📞 999 — Polis / Bomba / Ambulans</a><a style="background:#ea580c" href="tel:112">📱 112 — Kecemasan (telefon bimbit)</a><a style="background:#7c3aed" href="tel:1800880000">🛣️ PLUSLine 1-800-88-0000</a><div class="card" id="myloc">Lokasi: mendapatkan…</div><button class="btn" style="background:#1e1b4b;color:#fff;width:100%" onclick="shareLoc()">Kongsi lokasi saya</button></div></div>
+<script src="app.js"></script></body></html>
