@@ -25,23 +25,33 @@ window.clearRoute=()=>{line&&map.removeLayer(line);destMk&&map.removeLayer(destM
 // Toll: sample PLUS plazas, approx RM/km
 const TOLL=[{n:'Jitra',p:[6.26,100.42]},{n:'Juru',p:[5.33,100.44]},{n:'Ipoh Utara',p:[4.66,101.09]},{n:'Tapah',p:[4.19,101.26]},{n:'Rawang',p:[3.32,101.56]},{n:'Sungai Besi',p:[3.05,101.71]},{n:'Seremban',p:[2.73,101.93]},{n:'Ayer Keroh',p:[2.27,102.28]},{n:'Skudai',p:[1.54,103.66]}];
 function tollEstimate(){const hit=TOLL.filter(t=>coords.some((c,i)=>i%5==0&&map.distance(c,t.p)<4000));if(!hit.length)return null;return{plazas:hit.map(t=>t.n),rm:Math.max(1,Math.round(R.distance/1000*0.105))}}
+// Voice guidance (Web Speech API)
+let muted=localStorage.getItem('sembilan_muted')=='1',voiceSel=null,spoken=new Set();
+function pickVoice(){if(!('speechSynthesis'in window))return;const v=speechSynthesis.getVoices();voiceSel=v.find(x=>/^ms[-_]MY/i.test(x.lang))||v.find(x=>/^ms/i.test(x.lang))||v.find(x=>/^en[-_]US/i.test(x.lang))||v[0]||null}
+if('speechSynthesis'in window){pickVoice();speechSynthesis.onvoiceschanged=pickVoice}
+function say(t,force){if(!('speechSynthesis'in window)||(muted&&!force))return;const u=new SpeechSynthesisUtterance(t);if(voiceSel){u.voice=voiceSel;u.lang=voiceSel.lang}else u.lang='ms-MY';u.rate=1;speechSynthesis.speak(u)}
+function sayOnce(k,t){if(spoken.has(k))return;spoken.add(k);say(t)}
+function plain(t){return t.replace(/[^\p{L}\p{N}\s\-,.]/gu,' ').replace(/\s+/g,' ').trim()}
+function spD(m){return m>=1000?(m/1000).toFixed(1).replace('.0','')+' kilometer':Math.round(m/10)*10+' meter'}
+function updMute(){const b=$('mutebtn');if(b)b.textContent=muted?'🔇':'🔊'}
+window.toggleMute=()=>{muted=!muted;localStorage.setItem('sembilan_muted',muted?'1':'0');updMute();if(muted)speechSynthesis&&speechSynthesis.cancel();else say('Suara dihidupkan')};
 // Drive mode
 const AR={left:'⬅️','slight left':'↖️','sharp left':'↩️',right:'➡️','slight right':'↗️','sharp right':'↪️',straight:'⬆️',uturn:'🔄'};
 function stepText(s){const m=s.maneuver,t=m.type,road=s.name||s.ref||'';const ar=AR[m.modifier]||'⬆️';
 if(t=='arrive')return'🏁 Tiba di destinasi';if(t=='depart')return`⬆️ Mula${road?' di '+road:''}`;if(t=='roundabout'||t=='rotary')return`🔄 Bulatan, keluar ke-${m.exit||1}${road?' → '+road:''}`;
 const v={turn:'Belok',fork:'Ikut simpang','on ramp':'Masuk susur','off ramp':'Keluar susur',merge:'Bergabung','end of road':'Hujung jalan, belok','new name':'Terus',continue:'Terus'}[t]||'Terus';
 const dir={left:'kiri','slight left':'sedikit kiri','sharp left':'tajam kiri',right:'kanan','slight right':'sedikit kanan','sharp right':'tajam kanan',straight:'',uturn:'pusing U'}[m.modifier]||'';return`${ar} ${v} ${dir}${road?' ke '+road:''}`}
-window.startDrive=()=>{if(!R)return;driving=true;follow=true;$('sheet').style.display='none';$('search').style.display='none';$('banner').style.display='block';$('drivebar').style.display='flex';if(!me)alert('Lokasi GPS tidak tersedia — mod pemanduan perlukan GPS.');driveTick()};
-window.stopDrive=()=>{driving=false;$('banner').style.display='none';$('drivebar').style.display='none';$('search').style.display='block';clearRoute()};
+window.startDrive=()=>{if(!R)return;if('speechSynthesis'in window){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}spoken=new Set();updMute();say('Memulakan navigasi ke '+destName+'. '+plain(stepText(steps[0]))+(steps[1]?'. Kemudian '+plain(stepText(steps[1])):''));driving=true;follow=true;$('sheet').style.display='none';$('search').style.display='none';$('banner').style.display='block';$('drivebar').style.display='flex';if(!me)alert('Lokasi GPS tidak tersedia — mod pemanduan perlukan GPS.');driveTick()};
+window.stopDrive=()=>{driving=false;'speechSynthesis'in window&&speechSynthesis.cancel();$('banner').style.display='none';$('drivebar').style.display='none';$('search').style.display='block';clearRoute()};
 function nearestIdx(p){let b=0,bd=1e12;for(let i=0;i<coords.length;i++){const d=map.distance(p,coords[i]);if(d<bd){bd=d;b=i}}return[b,bd]}
 async function driveTick(){$('speed').innerHTML=`${Math.round(speed||0)}<small>km/j</small>`;if(!me||!R)return;if(follow)map.setView(me,17,{animate:true});
 const[idx,off]=nearestIdx(me);
-if(off>60&&!rerouting&&Date.now()-lastRR>10000){rerouting=true;lastRR=Date.now();$('ins').textContent='🔁 Mengira semula laluan…';try{drawRoute(await osrm(me,dest))}catch(e){}rerouting=false;return}
+if(off>60&&!rerouting&&Date.now()-lastRR>10000){rerouting=true;lastRR=Date.now();$('ins').textContent='🔁 Mengira semula laluan…';say('Mengira semula laluan');try{drawRoute(await osrm(me,dest));spoken=new Set(['arr']);say('Laluan baharu dikira')}catch(e){}rerouting=false;return}
 let rem=0;for(let i=idx;i<coords.length-1;i++)rem+=map.distance(coords[i],coords[i+1]);
-if(rem<40){$('ins').textContent='🏁 Anda telah tiba!';$('insd').textContent=destName;$('eta').textContent='Tiba';return}
+if(rem<40){$('ins').textContent='🏁 Anda telah tiba!';$('insd').textContent=destName;$('eta').textContent='Tiba';sayOnce('arr','Anda telah tiba di destinasi, '+destName);return}
 // next step: first step whose maneuver location is ahead of idx
 let next=steps[steps.length-1],nd=0;for(const s of steps.slice(1)){const [si]=nearestIdx([s.maneuver.location[1],s.maneuver.location[0]]);if(si>idx){next=s;nd=0;for(let i=idx;i<si;i++)nd+=map.distance(coords[i],coords[i+1]);break}}
-$('ins').textContent=stepText(next);$('insd').textContent='dalam '+fmtD(nd);
+$('ins').textContent=stepText(next);{const k=next.maneuver.location.join(',');const tx=plain(stepText(next));if(nd<=70)sayOnce(k+'@50',next.maneuver.type=='arrive'?'Destinasi di hadapan':'Sekarang, '+tx);else if(nd<=550&&nd>=150)sayOnce(k+'@500','Dalam '+spD(nd)+', '+tx)}$('insd').textContent='dalam '+fmtD(nd);
 const eta=R.duration*(rem/R.distance);const at=new Date(Date.now()+eta*1000);$('eta').textContent=at.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit'});$('rem').textContent=`${fmtT(eta)} · ${fmtD(rem)} lagi`}
 // Reports
 const TYPES={accident:['💥','Kemalangan','#ef4444'],jam:['🚗','Kesesakan','#f97316'],police:['👮','Polis','#3b82f6'],hazard:['⚠️','Bahaya','#eab308'],flood:['🌊','Banjir','#0ea5e9'],closure:['⛔','Jalan Ditutup','#6b7280']};
@@ -54,7 +64,7 @@ l.forEach(r=>{const[e,n]=TYPES[r.type];L.marker(r.p,{icon:ic(`${e}<span>${ago(r.
 window.report=k=>{const c=map.getCenter(),p=me||[c.lat,c.lng];const l=load();l.push({id:Math.random().toString(36).slice(2),type:k,p,ts:Date.now(),up:0,down:0});save(l);closeM();drawReps();toast(`${TYPES[k][0]} Terima kasih! Laporan dihantar`+(me?'':' (tengah peta)'))};
 window.vote=(id,up)=>{const l=load(),r=l.find(x=>x.id==id);if(!r)return;up?(r.up++,r.ts=Date.now()):r.down++;save(l);map.closePopup();drawReps();toast(up?'👍 Terima kasih!':'👎 Dikemas kini')};
 setInterval(drawReps,60000);drawReps();
-const alerted=new Set();function checkAlerts(){if(!me)return;load().forEach(r=>{const d=map.distance(me,r.p);if(d<800&&!alerted.has(r.id)){alerted.add(r.id);const[e,n]=TYPES[r.type];toast(`${e} ${n} di hadapan · ${fmtD(d)}`,5000);navigator.vibrate&&navigator.vibrate([200,100,200])}})}
+const alerted=new Set();function checkAlerts(){if(!me)return;load().forEach(r=>{const d=map.distance(me,r.p);if(d<800&&!alerted.has(r.id)){alerted.add(r.id);const[e,n]=TYPES[r.type];toast(`${e} ${n} di hadapan · ${fmtD(d)}`,5000);say(`${n} dilaporkan di hadapan, ${spD(d)}`);navigator.vibrate&&navigator.vibrate([200,100,200])}})}
 function toast(t,ms=2500){const a=$('alert');a.textContent=t;a.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>a.style.display='none',ms)}
 // R&R sample data
 const RR=[{n:'R&R Sungai Buloh',h:'PLUS E1',p:[3.2135,101.5703],f:['Surau','Tandas','Makanan','Minyak','EV']},{n:'R&R Seremban',h:'PLUS E2',p:[2.7690,101.9105],f:['Surau','Tandas','Makanan','Minyak','EV']},{n:'R&R Ayer Keroh',h:'PLUS E2',p:[2.2725,102.2856],f:['Surau','Tandas','Makanan','Minyak','EV']},{n:'R&R Tapah',h:'PLUS E1',p:[4.1745,101.2390],f:['Surau','Tandas','Makanan','Minyak','EV']},{n:'R&R Gunung Semanggol',h:'PLUS E1',p:[4.9590,100.6450],f:['Surau','Tandas','Makanan','Minyak']},{n:'R&R Pagoh',h:'PLUS E2',p:[2.1500,102.7700],f:['Surau','Tandas','Makanan','Minyak','EV']}];
